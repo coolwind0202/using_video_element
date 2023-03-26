@@ -3,6 +3,7 @@ import { VideoLoaded, VideoNotLoaded } from "./Home";
 
 import "./App.css";
 import { TimelineEntity } from "./features/timeline/components/Timeline";
+import { render } from "react-dom";
 
 function App() {
   /*
@@ -92,32 +93,20 @@ function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // 1/60秒間隔のプレイヤーの時間更新更新に応じて、videoRefの現在フレームを読み取り、canvasに書き出す
-  /*
-    追記：ここは期待通りに動かず、canvasには多くの場合何も表示されません（たまに表示されます）
-    書き始めた当時、1/60秒間隔で更新しようと思っていましたが、時間間隔は不定でも問題なかったため、requestAnimationFrameを使っています
-  */
-
-  useEffect(() => {
-    const renderCanvas = () => {
-      const ctx = canvasRef.current?.getContext("2d");
-      if (!ctx) return;
-
-      const videoElement = videoRef.current;
-      if (!videoElement) return;
-
-      ctx.drawImage(videoElement, 0, 0);
-
-      requestAnimationFrame(renderCanvas);
-    };
-
-    requestAnimationFrame(renderCanvas);
-  }, []);
-
   // 停止中：更新しない
 
   const frameInputRef = useRef<HTMLInputElement>(null);
   const frameDisplayRef = useRef<HTMLParagraphElement>(null);
+
+  const renderCanvas = () => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    ctx.drawImage(videoElement, 0, 0);
+  };
 
   const updateFrameNumber = (value: number) => {
     currentPlayFrame.current = value;
@@ -203,6 +192,14 @@ function App() {
       currentEntityIndex.current++;
     }
 
+    /*
+      これでも動きますが、非同期処理として何らかの問題があり、
+    */
+    await new Promise((resolve) => {
+      renderCanvas();
+      resolve(null);
+    });
+
     updateFrameNumber(currentPlayFrame.current + 1);
   };
 
@@ -221,11 +218,6 @@ function App() {
 
     f();
   }, []);
-
-  /*
-    追記：3つの実装を試し、うち2つはコメントアウトして残しています
-    3つめの実装は、期待より速い間隔でコールバックが呼び出されるという問題と、実際には再生が開始しないという問題を抱えています
-  */
 
   return (
     <div className="w-screen h-screen grid grid-cols-3">
