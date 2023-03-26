@@ -3,7 +3,6 @@ import { VideoLoaded, VideoNotLoaded } from "./Home";
 
 import "./App.css";
 import { TimelineEntity } from "./features/timeline/components/Timeline";
-import clsx from "clsx";
 
 function App() {
   /*
@@ -64,7 +63,7 @@ function App() {
   /**
    * 現在の再生フレーム
    */
-  const [currentPlayFrame, setCurrentPlayFrame] = useState(0);
+  const currentPlayFrame = useRef<number>(0);
 
   const onFileSelect: React.FormEventHandler<HTMLInputElement> = (e) => {
     const files = e.currentTarget.files;
@@ -117,78 +116,99 @@ function App() {
 
   // 停止中：更新しない
 
-  // ユーザーがシークしたらフレームを更新する
-  const onSeek: React.FormEventHandler<HTMLInputElement> = (props) => {
-    const value = props.currentTarget.valueAsNumber;
-    setCurrentPlayFrame(value);
+  const frameInputRef = useRef<HTMLInputElement>(null);
+  const frameDisplayRef = useRef<HTMLParagraphElement>(null);
 
+  const updateFrameNumber = (value: number) => {
+    currentPlayFrame.current = value;
+
+    const frameInput = frameInputRef.current;
+    if (frameInput) frameInput.value = value.toString();
+
+    const frameDisplay = frameDisplayRef.current;
+    if (frameDisplay)
+      frameDisplay.innerText = `${Math.floor(value / projectFPS)}秒`;
+  };
+
+  const seek = (time: number) => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
 
-    const playTime = currentPlayFrame / projectFPS;
+    const playTime = time;
     videoElement.currentTime = playTime;
+  };
+
+  // ユーザーがシークしたらフレームを更新する
+  const onSeek: React.FormEventHandler<HTMLInputElement> = (props) => {
+    const value = props.currentTarget.valueAsNumber;
+    seek(value / projectFPS);
+    updateFrameNumber(value);
   };
 
   /*
     現在の再生対象となっているEntityのindex。
     Entityの再生が完了したタイミングで増加します
   */
-  const [currentEntityIndex, setCurrentEntityIndex] = useState<number>(0);
-  const [isVideoPlaying, setVideoPlaying] = useState<boolean>(false);
+  const currentEntityIndex = useRef<number>(0);
+  const isVideoPlaying = useRef(false);
 
-  // そして：フレームが更新されたらplayTimeとentitiesを対応させて、currentPlayFrameがstartフレームとendフレームの間に存在するようなエンティティを見つける
-  //  で、currentPlayFrame - そのエンティティのstartフレームが現在のエンティティのフレーム数なので、それをセット　しない
-  //  セットするのはフレーム数ではなくて時間ですよ・・・
+  const changeIsVideoPlaying = (value: boolean) => {
+    isVideoPlaying.current = value;
+    const videoElement = videoRef.current;
+    if (!videoElement) return;
+
+    if (value) videoElement.classList.remove("grayscale");
+    else videoElement.classList.add("grayscale");
+  };
 
   const controllVideo = async () => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
 
-    const currentEntity = entities.at(currentEntityIndex);
+    const currentEntity = entities.at(currentEntityIndex.current);
     if (currentEntity === undefined) return;
 
-    if (currentPlayFrame === currentEntity.timeline.start && !isVideoPlaying) {
+    if (
+      currentPlayFrame.current === currentEntity.timeline.start &&
+      !isVideoPlaying.current
+    ) {
       // Entityの開始フレームに到達したため、再生を開始する
-      setVideoPlaying(true);
-      videoElement.currentTime = currentEntity.content.startTime;
+      changeIsVideoPlaying(true);
+      seek(currentEntity.content.startTime);
+
       await videoElement.play();
       console.log("play-start", currentEntity.content.startTime);
       // ずれを防止するため、フレームの更新はEntityの再生が開始したタイミングで行ったほうがよい？
     }
 
-    if (currentPlayFrame === currentEntity.timeline.end && isVideoPlaying) {
+    if (
+      currentPlayFrame.current === currentEntity.timeline.end &&
+      isVideoPlaying.current
+    ) {
       // 再生を終了する
-      setVideoPlaying(false);
+      changeIsVideoPlaying(false);
+
       videoElement.pause();
-      setCurrentEntityIndex((value) => value + 1);
+      currentEntityIndex.current++;
     }
 
-    setCurrentPlayFrame((value) => value + 1);
+    updateFrameNumber(currentPlayFrame.current + 1);
   };
 
-  // useTimeoutFnがhookとして設計されたので、再帰的にTimeoutをするということができない
-  // しかしuseIntervalでcontrollVideoを呼び出すのは不適切。なぜなら、play()が完了をするのをsetIntervalでは待てず、必ず同じ頻度で実行してしまう
-  // setTimeoutを、playの完了後に再帰的に呼び出す設計なら、この問題を回避できるが・・・？？
-
-  /*
-  useTimeoutFn(() => {
-    const f = () => {
-      controllVideo();
-    }
-  }, 1000 / projectFPS);
-
-  useInterval(async () => {
-    await controllVideo();
-  }, 1000 / projectFPS);
-  */
-
   useEffect(() => {
-    setTimeout(async function f() {
+    /*
+      フレームを一定間隔（動画のデコード時間によって若干変動します）で処理する。
+    */
+    const sleep = (ms: number) =>
+      new Promise((resolve) => setTimeout(() => resolve(null), ms));
+
+    const f = async () => {
       await controllVideo();
-      setTimeout(async () => {
-        await f();
-      }, 1000 / projectFPS);
-    }, 1000 / projectFPS);
+      await sleep(1000 / projectFPS);
+      await f();
+    };
+
+    f();
   }, []);
 
   /*
@@ -215,7 +235,7 @@ function App() {
                   ref={videoRef}
                   width={1280}
                   height={720}
-                  className={clsx("w-full", !isVideoPlaying && "grayscale")}
+                  className="w-full grayscale"
                 ></video>
               </div>
               <div className="col-start-2 col-end-2">
@@ -233,11 +253,11 @@ function App() {
               min={0}
               max={50000}
               step={1}
-              value={currentPlayFrame}
+              ref={frameInputRef}
               className="w-full"
               onInput={onSeek}
             />
-            <p>{Math.floor(currentPlayFrame / projectFPS)} 秒</p>
+            <p ref={frameDisplayRef} />
           </div>
         </VideoLoaded>
       )}
