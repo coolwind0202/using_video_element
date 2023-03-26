@@ -130,6 +130,14 @@ function App() {
       frameDisplay.innerText = `${Math.floor(value / projectFPS)}秒`;
   };
 
+  const getEntityIndex = (frame: number) => {
+    for (const [i, entity] of entities.entries()) {
+      if (entity.timeline.end >= frame) return i;
+    }
+
+    return entities.length;
+  };
+
   const seek = (time: number) => {
     const videoElement = videoRef.current;
     if (!videoElement) return;
@@ -139,9 +147,12 @@ function App() {
   };
 
   // ユーザーがシークしたらフレームを更新する
-  const onSeek: React.FormEventHandler<HTMLInputElement> = (props) => {
+  const onSeek: React.FormEventHandler<HTMLInputElement> = async (props) => {
     const value = props.currentTarget.valueAsNumber;
     seek(value / projectFPS);
+
+    currentEntityIndex.current = getEntityIndex(value);
+    console.log(currentEntityIndex.current);
     updateFrameNumber(value);
   };
 
@@ -168,23 +179,17 @@ function App() {
     const currentEntity = entities.at(currentEntityIndex.current);
     if (currentEntity === undefined) return;
 
-    if (
-      currentPlayFrame.current === currentEntity.timeline.start &&
-      !isVideoPlaying.current
-    ) {
+    if (currentPlayFrame.current === currentEntity.timeline.start) {
       // Entityの開始フレームに到達したため、再生を開始する
       changeIsVideoPlaying(true);
       seek(currentEntity.content.startTime);
-
       await videoElement.play();
+
       console.log("play-start", currentEntity.content.startTime);
       // ずれを防止するため、フレームの更新はEntityの再生が開始したタイミングで行ったほうがよい？
     }
 
-    if (
-      currentPlayFrame.current === currentEntity.timeline.end &&
-      isVideoPlaying.current
-    ) {
+    if (currentPlayFrame.current === currentEntity.timeline.end) {
       // 再生を終了する
       changeIsVideoPlaying(false);
 
