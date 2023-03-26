@@ -154,6 +154,12 @@ function App() {
     currentEntityIndex.current = getEntityIndex(value);
     console.log(currentEntityIndex.current);
     updateFrameNumber(value);
+
+    /*
+      seekした際に一度動画を停止する
+    */
+    changeIsVideoPlaying(false);
+    videoRef.current?.pause();
   };
 
   /*
