@@ -104,6 +104,7 @@ function App() {
 
     const videoElement = videoRef.current;
     if (!videoElement) return;
+    if (!isVideoPlaying.current) return;
 
     ctx.drawImage(videoElement, 0, 0);
   };
@@ -207,16 +208,26 @@ function App() {
     /*
       フレームを一定間隔（動画のデコード時間によって若干変動します）で処理する。
     */
+    let ignore = false;
+
     const sleep = (ms: number) =>
       new Promise((resolve) => setTimeout(() => resolve(null), ms));
 
     const f = async () => {
+      if (ignore) {
+        console.log("clean up");
+        return;
+      }
       await controllVideo();
+
       await sleep(1000 / projectFPS);
       await f();
     };
 
     f();
+    return () => {
+      ignore = true;
+    };
   }, []);
 
   return (
